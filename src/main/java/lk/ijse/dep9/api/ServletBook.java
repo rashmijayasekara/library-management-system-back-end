@@ -49,8 +49,9 @@ public class ServletBook extends HttpServlet2 {
             }
 
         } else {
-            Matcher matcher = Pattern.compile("^/([0-9]{3}-){3}[0-9]{3}/?$").matcher(request.getPathInfo());
+            Matcher matcher = Pattern.compile("^/(([0-9]{3}-){3}[0-9]{3})/?$").matcher(request.getPathInfo());
             if (matcher.matches()) {
+                System.out.println(matcher.group(1));
                 getBookDetails(matcher.group(1), response);
 
             } else {
@@ -64,6 +65,7 @@ public class ServletBook extends HttpServlet2 {
         try (Connection connection = pool.getConnection()) {
             PreparedStatement statement = connection.prepareStatement("SELECT * FROM book WHERE isbn=?");
             statement.setString(1, isbn);
+            System.out.println(isbn);
             ResultSet resultSet = statement.executeQuery();
             if (resultSet.next()) {
                 String is = resultSet.getString("isbn");
@@ -71,8 +73,9 @@ public class ServletBook extends HttpServlet2 {
                 String author = resultSet.getString("author");
                 int copies = Integer.parseInt(resultSet.getString("copies"));
                 BookDTO book = new BookDTO(is, name, author, copies);
+                System.out.println(book);
                 response.setContentType("application/json");
-                response.setHeader("Access-Control-Allow-Origin", "*");
+//                response.setHeader("Access-Control-Allow-Origin", "*");
                 JsonbBuilder.create().toJson(book, response.getWriter());
             } else {
                 response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Failed to fetch the book details");
@@ -86,56 +89,56 @@ public class ServletBook extends HttpServlet2 {
 
     private void searchPaginatedBooks(String query, int page, int size, HttpServletResponse response) throws IOException {
         try (Connection connection = pool.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("SELECT * FROM book WHERE isbn LIKE ? OR title LIKE ? OR author LIKE ? LIMIT ? OFFSET ?");
-            PreparedStatement statementCount = connection.prepareStatement("SELECT COUNT(isbn) FROM book WHERE isbn LIKE ? OR title LIKE ? OR author LIKE ?");
+            PreparedStatement stmCount = connection.prepareStatement("SELECT COUNT(isbn) FROM book WHERE isbn LIKE ? OR title LIKE ? OR author LIKE ?");
+            PreparedStatement stm = connection.prepareStatement("SELECT * FROM book WHERE isbn LIKE ? OR title LIKE ? OR author LIKE ? LIMIT ? OFFSET ?");
 
-            query="%"+query+"%";
-            statementCount.setString(1,query);
-            statementCount.setString(2,query);
-            statementCount.setString(3,query);
-            ResultSet resultSet1 = statement.executeQuery();
-            resultSet1.next();
+            query = "%" + query + "%";
+            stmCount.setString(1, query);
+            stmCount.setString(2, query);
+            stmCount.setString(3, query);
+            ResultSet rst = stmCount.executeQuery();
+            rst.next();
 
-            query="%"+query+"%";
-            statement.setString(1,query);
-            statement.setString(2,query);
-            statement.setString(3,query);
-            statement.setInt(4,size);
-            statement.setInt(5,(page-1)*size);
-            ResultSet resultSet= statement.executeQuery();
+            int totalBooks = rst.getInt(1);
+            response.addIntHeader("X-Total-Count", totalBooks);
 
-            int totalBooks = resultSet.getInt(1);
-            response.addIntHeader("X-Total-books",totalBooks);
+            stm.setString(1, query);
+            stm.setString(2, query);
+            stm.setString(3, query);
+            stm.setInt(4, size);
+            stm.setInt(5, (page - 1) * size);
 
-            ArrayList<BookDTO> bookDTOS = new ArrayList<>();
+            ResultSet rst2 = stm.executeQuery();
 
-            while (resultSet.next()){
-                String isbn = resultSet.getString("isbn");
-                String title = resultSet.getString("title");
-                String author = resultSet.getString("author");
-                int copies = resultSet.getInt("copies");
-                bookDTOS.add(new BookDTO(isbn,title,author,copies));
+            ArrayList<BookDTO> books = new ArrayList<>();
 
+            while (rst2.next()) {
+                String isbn = rst2.getString("isbn");
+                String title = rst2.getString("title");
+                String author = rst2.getString("author");
+                int copies = rst2.getInt("copies");
+                books.add(new BookDTO(isbn, title, author, copies));
             }
-            response.addHeader("Access-Control-Allow-Origin","*");
-            response.addHeader("Access-Control-Allow-Header","X-Total-Count");
-            response.addHeader("Access-Control-Expose-Header","X-Total-Count");
-            JsonbBuilder.create().toJson(bookDTOS,response.getWriter());
 
+//            response.addHeader("Access-Control-Allow-Origin", "*");
+//            response.addHeader("Access-Control-Allow-Headers", "X-Total-Count");
+//            response.addHeader("Access-Control-Expose-Headers", "X-Total-Count");
+            response.setContentType("application/json");
+            JsonbBuilder.create().toJson(books, response.getWriter());
         } catch (SQLException e) {
             e.printStackTrace();
-            response.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED);
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Failed to fetch books");
         }
     }
 
     private void searchBooks(String query, HttpServletResponse response) throws IOException {
         try (Connection connection = pool.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("SELECT * FROM WHERE isbn LIKE ? OR title LIKE ? OR author LIKE ? ");
+            PreparedStatement statement = connection.prepareStatement("SELECT * FROM book WHERE isbn LIKE ? OR title LIKE ? OR author LIKE ? ");
             query="%"+query+"%";
             statement.setString(1,query);
             statement.setString(2,query);
             statement.setString(3,query);
-            statement.setString(4,query);
+//            statement.setString(4,query);
             ResultSet resultSet = statement.executeQuery();
             ArrayList<BookDTO> books=new ArrayList<>();
             while (resultSet.next()){
@@ -170,7 +173,7 @@ public class ServletBook extends HttpServlet2 {
                 bookDTOS.add(book);
             }
             connection.close();
-            response.addHeader("Access-Controll-Allow-Origin", "*");
+//            response.addHeader("Access-Controll-Allow-Origin", "*");
             response.setContentType("application/json");
             Jsonb jsonb = JsonbBuilder.create();
             jsonb.toJson(bookDTOS, response.getWriter());
@@ -208,9 +211,9 @@ public class ServletBook extends HttpServlet2 {
                 int copies = resultSet1.getInt("copies");
                 bookDTOS.add(new BookDTO(isbn, title, author, copies));
             }
-            response.addHeader("Access-Control-Allow-Origin", "*");
-            response.addHeader("Access-Control-Allow-Headers", "X-Total-Count");
-            response.addHeader("Access-Control-Expose-Headers", "X-Total-Count");
+//            response.addHeader("Access-Control-Allow-Origin", "*");
+//            response.addHeader("Access-Control-Allow-Headers", "X-Total-Count");
+//            response.addHeader("Access-Control-Expose-Headers", "X-Total-Count");
             response.setContentType("application/json");
             JsonbBuilder.create().toJson(bookDTOS, response.getWriter());
         } catch (SQLException e) {
@@ -228,7 +231,8 @@ public class ServletBook extends HttpServlet2 {
         }
         Matcher matcher = Pattern.compile("^/([0-9]{3}-){3}[0-9]{3}/?$").matcher(request.getPathInfo());
         if (matcher.matches()){
-            updateBook(matcher.group(1),request,response);
+            updateBook(matcher.group(0),request,response);
+
         }else {
             response.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED);
         }
@@ -240,13 +244,16 @@ public class ServletBook extends HttpServlet2 {
                 throw new JsonbException("Invalid Json");
             }
             BookDTO bookDTO = JsonbBuilder.create().fromJson(request.getReader(), BookDTO.class);
+            System.out.println(bookDTO.getIsbn()+" "+ bookDTO.getTitle()+" "+bookDTO.getAuthor()+" "+bookDTO.getCopies());
 
-            if (bookDTO.getIsbn()==null || !bookDTO.getIsbn().matches("([0-9]{3}-){3}[0-9]{3}")){
+            if (bookDTO.getIsbn()==null || !isbn.equalsIgnoreCase("/"+bookDTO.getIsbn())){
+                System.out.println(bookDTO.getIsbn());
+                System.out.println(isbn);
                 throw new JsonbException("ISBN is invalid or empty");
-            } else if (bookDTO.getTitle()==null || !bookDTO.getIsbn().matches("[A-Za-z ]+")) {
+            } else if (bookDTO.getTitle()==null || !bookDTO.getTitle().matches("[A-Za-z ]+")) {
                 throw new JsonbException("Title is empty or invalid");
-            } else if (bookDTO.getAuthor()==null || !bookDTO.getAuthor().matches("[A-Za-z ]")) {
-                throw new JsonbException("Invaid Author name or empty ");
+            } else if (bookDTO.getAuthor()==null || !bookDTO.getAuthor().matches("[A-Za-z- ]+")) {
+                throw new JsonbException("Invalid Author name or empty ");
             }else if (bookDTO.getCopies()==0 || !(Integer.toString(bookDTO.getCopies())).matches("[0-9]")){
                 throw new JsonbException("Zero number of copies or invalid number of copies, check the number of copies");
             }
@@ -258,7 +265,7 @@ public class ServletBook extends HttpServlet2 {
                 statement.setString(4, bookDTO.getIsbn());
 
                 if (statement.executeUpdate() == 1) {
-                    response.setHeader("Access-Control-Allow-Origin", "*");
+//                    response.setHeader("Access-Control-Allow-Origin", "*");
                     response.setStatus(HttpServletResponse.SC_NO_CONTENT);
                 } else {
                     response.sendError(HttpServletResponse.SC_NOT_FOUND, "Member does not exist");
@@ -272,52 +279,17 @@ public class ServletBook extends HttpServlet2 {
         }
     }
 
-    @Override
-    protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        resp.setHeader("Access-Control-Allow-Origin", "*");
-        resp.setHeader("Access-Control-Allow-Methods", "POST,GET,PATCH,DELETE, HEAD, OPTIONS, PUT");
-
-        String header = req.getHeader("Access-Control-Request-Headers");
-        if (header != null) {
-            resp.setHeader("Access-Control-Allow-Headers", header);
-            resp.setHeader("Access-Control-Expose-Header", header);
-        }
-    }
-
-    @Override
-    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        if (req.getPathInfo()==null || req.getPathInfo().equals("/")){
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            return;
-
-        }
-        Matcher matcher = Pattern.compile("^/([0-9]{3}-){3}[0-9]{3}").matcher(req.getPathInfo());
-        if (matcher.matches()){
-            deleteBook(matcher.group(1),resp);
-
-        } else {
-            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,"Expected Valid UUID");
-        }
-
-    }
-    private void deleteBook(String isbn,HttpServletResponse response){
-        try (Connection connection = pool.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("DELETE FROM book WHERE isbn=?");
-            statement.setString(1,isbn);
-            int i = statement.executeUpdate();
-            if (i==0){
-                response.sendError(HttpServletResponse.SC_NOT_FOUND,"Invalid ISBN");
-            }else {
-                response.setHeader("Access-Control-Allow-Origin", "*");
-                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
+//    @Override
+//    protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+////        resp.setHeader("Access-Control-Allow-Origin", "*");
+////        resp.setHeader("Access-Control-Allow-Methods", "POST,GET,PATCH,DELETE, HEAD, OPTIONS, PUT");
+////
+////        String header = req.getHeader("Access-Control-Request-Headers");
+////        if (header != null) {
+////            resp.setHeader("Access-Control-Allow-Headers", header);
+////            resp.setHeader("Access-Control-Expose-Header", header);
+////        }
+//    }
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         if (request.getPathInfo()==null || request.getPathInfo().equals("/")){
@@ -345,7 +317,7 @@ public class ServletBook extends HttpServlet2 {
                     if (i==1){
                         response.setStatus(HttpServletResponse.SC_CREATED);
                         response.setContentType("application/json");
-                        response.setHeader("Access-Control-Allow-Origin","*");
+//                        response.setHeader("Access-Control-Allow-Origin","*");
                         JsonbBuilder.create().toJson(bookDTO,response.getWriter());
 
                     }else {
